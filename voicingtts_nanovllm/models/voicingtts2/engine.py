@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass
 
 import numpy as np
@@ -24,21 +23,11 @@ class VoicingTTS2SeqPayload:
     cfg_value: float
     decode_pad: np.ndarray | None = None
     max_generate_length: int | None = None
-    # TRIAL PATCH (decode-every-N): patches awaiting VAE decode, the waveform
-    # produced THIS step (None on skipped steps — emission gate), and a step
-    # counter (generated_waveforms no longer counts steps when decodes skip).
-    pending_latents: np.ndarray | None = None
-    new_waveform: np.ndarray | None = None
-    n_patches: int = 0
 
 
 class VoicingTTS2Engine(LLMEngineBase):
     def __init__(self, config: Config[VoicingTTS2Config]):
-        # TRIAL PATCH (VAE-opt): the VAE re-decodes this many context frames
-        # every step and discards them (keeps only the new patch_size frames).
-        # 12 → window 16 for 4 kept (4x redundant). Smaller pad = less VAE
-        # compute; too small risks chunk-boundary artifacts.
-        self.n_decode_pad_frames = int(os.environ.get("NANOVLLM_DECODE_PAD", "12"))
+        self.n_decode_pad_frames = 12
         self.feat_dim = config.model_config.feat_dim
         self.patch_size = config.model_config.patch_size
         self.audio_start_token = 101
@@ -72,8 +61,6 @@ class VoicingTTS2Engine(LLMEngineBase):
                     temperature=seq.custom_payload.temperature,
                     cfg_value=seq.custom_payload.cfg_value,
                     padding_decode=seq.custom_payload.decode_pad,
-                    pending_feats=seq.custom_payload.pending_latents,
-                    force_flush=self._about_to_hit_max_len(seq),
                 ),
                 adapter_id=seq.adapter_id,
             )
@@ -90,53 +77,35 @@ class VoicingTTS2Engine(LLMEngineBase):
                 temperature=seq.custom_payload.temperature,
                 cfg_value=seq.custom_payload.cfg_value,
                 padding_decode=seq.custom_payload.decode_pad,
-                pending_feats=seq.custom_payload.pending_latents,
-                force_flush=self._about_to_hit_max_len(seq),
             ),
             adapter_id=seq.adapter_id,
         )
-
-    @staticmethod
-    def _about_to_hit_max_len(seq: Sequence[VoicingTTS2SeqPayload]) -> bool:
-        """True when this step is the sequence's last (max_generate_length),
-        so the runner must flush any pending patches to audio."""
-        p = seq.custom_payload
-        return p.max_generate_length is not None and p.n_patches + 1 >= p.max_generate_length
 
     def postprocess_seq(self, seq: Sequence[VoicingTTS2SeqPayload], outputs: dict, is_prefill: bool):
         stop_flag = outputs["stop_flag"]
         latents = outputs["latents"]
         waveforms = outputs["waveforms"]
 
-        p = seq.custom_payload
         seq.append_token(latents.tobytes())
-        p.feats.append(latents[None])
-        p.text_tokens.append(0)
-        p.feat_masks.append(True)
-        p.n_patches += 1
-        p.new_waveform = waveforms
+        seq.custom_payload.feats.append(latents[None])
+        seq.custom_payload.text_tokens.append(0)
+        seq.custom_payload.feat_masks.append(True)
+        seq.custom_payload.generated_waveforms.append(waveforms)
 
         latents = latents.reshape(-1, self.feat_dim)
-        if waveforms is None:
-            # VAE decode skipped this step (decode-every-N): buffer the patch;
-            # decode_pad stays put — it is the context *before* the pending run.
-            p.pending_latents = (
-                latents if p.pending_latents is None else np.concatenate([p.pending_latents, latents], axis=0)
-            )
+        if seq.custom_payload.decode_pad is not None:
+            seq.custom_payload.decode_pad = np.concatenate([seq.custom_payload.decode_pad, latents], axis=0)[
+                -self.n_decode_pad_frames :
+            ]
         else:
-            p.generated_waveforms.append(waveforms)
-            flushed = (
-                latents if p.pending_latents is None else np.concatenate([p.pending_latents, latents], axis=0)
-            )
-            p.pending_latents = None
-            if p.decode_pad is not None:
-                p.decode_pad = np.concatenate([p.decode_pad, flushed], axis=0)[-self.n_decode_pad_frames :]
-            else:
-                p.decode_pad = flushed[-self.n_decode_pad_frames :]
+            seq.custom_payload.decode_pad = latents[-self.n_decode_pad_frames :]
 
         if stop_flag == 1:
             seq.stoped = True
-        elif p.max_generate_length is not None and p.n_patches >= p.max_generate_length:
+        elif (
+            seq.custom_payload.max_generate_length is not None
+            and len(seq.custom_payload.generated_waveforms) >= seq.custom_payload.max_generate_length
+        ):
             seq.stoped = True
 
     def add_request(
