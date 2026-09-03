@@ -21,6 +21,10 @@ class VoicingTTS2Payload:
     temperature: float = 1.0
     cfg_value: float = 1.0
     padding_decode: np.ndarray | None = None
+    # TRIAL PATCH (decode-every-N): latent patches generated but not yet
+    # VAE-decoded, and a flag forcing a flush (e.g. max_len reached next step).
+    pending_feats: np.ndarray | None = None
+    force_flush: bool = False
 
 
 class VoicingTTS2Runner(BaseModelRunner):
@@ -39,7 +43,27 @@ class VoicingTTS2Runner(BaseModelRunner):
         self.feat_dim = config.model_config.feat_dim
         self.patch_size = config.model_config.patch_size
         self.lora_config = config.lora_config
+        # TRIAL PATCH (VAE-graph): the VAE decode runs outside the main CUDA
+        # graph every step (~25-38% of step time). Its shapes are static per
+        # (batch bucket, time window), so we lazily capture one graph per key
+        # and replay it. Env-gated; eager fallback for uncaptured shapes.
+        # TRIAL PATCH (decode-every-N): run the VAE only every N patches per
+        # sequence, amortizing the redundant context window (N=2: decode
+        # pad+8 once instead of pad+4 twice). Chunk cadence drops to
+        # N*~160ms; audio content is unchanged.
+        self.decode_every = max(1, int(os.environ.get("NANOVLLM_DECODE_EVERY", "1")))
+        self.vae_graph_enabled = os.environ.get("NANOVLLM_VAE_CUDAGRAPH", "0") == "1"
+        self.vae_graphs: dict = {}
+        self.vae_graph_pool = None
+        # Micro-bench (L4, bf16, window 10): graph replay is 2.97x eager at
+        # bs=1 (launch-bound) but 1.00x at bs>=8 (compute-bound), and bucket
+        # rounding wastes rows. So graphs apply only at small EXACT batch
+        # sizes; everything else decodes eagerly.
+        max_bs = min(config.max_num_seqs, 512)
+        self.vae_graph_bs = [b for b in [1, 2, 4] if b <= max_bs]
         super().__init__(config, rank, device_idx, distributed_port, event)
+        if self.vae_graph_enabled:
+            self.capture_vae_graphs()
 
     @property
     def dtype(self) -> torch.dtype:
@@ -53,6 +77,13 @@ class VoicingTTS2Runner(BaseModelRunner):
         self.vae = AudioVAEV2(config=model_config.audio_vae_config)
         vae_state_dict = torch.load(os.path.join(model_path, "audiovae.pth"))["state_dict"]
         self.vae.load_state_dict(vae_state_dict)
+        # TRIAL PATCH (VAE-opt): the VAE runs outside the CUDA graph and was
+        # measured at ~38% of graph-mode step time in fp32. bf16 halves its
+        # conv cost on the L4 with no architectural change.
+        self.vae_dtype = torch.float32
+        if os.environ.get("NANOVLLM_VAE_BF16", "0") == "1":
+            self.vae = self.vae.to(torch.bfloat16)
+            self.vae_dtype = torch.bfloat16
         torch.set_default_dtype(torch.bfloat16)
 
     def make_dummy_inputs(self, batch_size: int, length: int) -> dict[str, torch.Tensor]:
@@ -72,7 +103,7 @@ class VoicingTTS2Runner(BaseModelRunner):
 
     def encode_latents(self, wav: torch.Tensor) -> np.ndarray:
         assert wav.ndim == 2, "Invalid shape of wav"
-        wav = wav.to(torch.float32).cuda()
+        wav = wav.to(self.vae_dtype).cuda()
         return (
             self.vae.encode(wav, self.vae.sample_rate)
             .permute(0, 2, 1)
@@ -81,6 +112,56 @@ class VoicingTTS2Runner(BaseModelRunner):
             .cpu()
             .numpy()
         )
+
+    @torch.inference_mode()
+    def capture_vae_graphs(self):
+        """Pre-capture one VAE-decode CUDA graph per batch-size bucket.
+
+        Must run at init, under @torch.inference_mode(), mirroring the main
+        capture_cudagraph: capture at request time (or in a different
+        grad-mode context) trips "inplace update to inference tensor"
+        because the RNG graph-state tensors belong to this mode context.
+        The time window is static: decode_pad + patch_size frames.
+        """
+        T = int(os.environ.get("NANOVLLM_DECODE_PAD", "12")) + self.patch_size
+        for bucket in reversed(self.vae_graph_bs):
+            with torch.inference_mode(False):
+                # normal (non-inference) tensor: run()'s decode section executes
+                # outside inference mode, and replay-time writes to an
+                # inference tensor there would be rejected.
+                in_buf = torch.zeros(bucket, T, self.feat_dim, dtype=self.vae_dtype, device="cuda")
+            torch.cuda.synchronize()
+            self.vae.decode(in_buf.permute(0, 2, 1))  # warmup (allocator settles)
+            torch.cuda.synchronize()
+            graph = torch.cuda.CUDAGraph()
+            if self.vae_graph_pool is None:
+                with torch.cuda.graph(graph):
+                    out = self.vae.decode(in_buf.permute(0, 2, 1))
+                self.vae_graph_pool = graph.pool()
+            else:
+                with torch.cuda.graph(graph, self.vae_graph_pool):
+                    out = self.vae.decode(in_buf.permute(0, 2, 1))
+            torch.cuda.synchronize()
+            self.vae_graphs[(bucket, T)] = {"graph": graph, "in": in_buf, "out": out}
+
+    @torch.inference_mode()
+    def _vae_decode_graphed(self, inputs_btf: torch.Tensor):
+        """Replay the pre-captured graph matching (bucket>=bs, T).
+
+        Returns decoder output sliced to bs, or None when no graph fits
+        (caller falls back to eager decode). Decorated with inference_mode
+        to match capture context: replay updates the captured output/RNG
+        tensors in place, which are inference tensors.
+        """
+        bs, T, _ = inputs_btf.shape
+        if bs not in self.vae_graph_bs:  # exact match only — padding wastes compute
+            return None
+        entry = self.vae_graphs.get((bs, T))
+        if entry is None:
+            return None
+        entry["in"].copy_(inputs_btf)
+        entry["graph"].replay()
+        return entry["out"]
 
     def run(self, seqs: list[RunnerTask[VoicingTTS2Payload]], is_prefill: bool):
         positions = self.prepare_prefill_context(seqs) if is_prefill else self.prepare_decode_context(seqs)
@@ -118,26 +199,58 @@ class VoicingTTS2Runner(BaseModelRunner):
             seq.custom_payload.padding_decode.shape[0] if seq.custom_payload.padding_decode is not None else 0
             for seq in seqs
         ]
-        max_pad_decode = max(pad_lengths) + self.patch_size
-        vae_decoder_inputs = torch.zeros(len(seqs), max_pad_decode, self.feat_dim, dtype=torch.float32, device="cuda")
-        for i, seq in enumerate(seqs):
-            pad_len = pad_lengths[i]
-            if pad_len > 0:
-                vae_decoder_inputs[i, :pad_len] = torch.from_numpy(seq.custom_payload.padding_decode).cuda(
-                    non_blocking=True
-                )
-            vae_decoder_inputs[i, pad_len : pad_len + self.patch_size] = latents[i].to(torch.float32)
-
-        vae_decoder_outputs = self.vae.decode(vae_decoder_inputs.permute(0, 2, 1))[:, 0, :].cpu().numpy()
         stop_flag = outputs["stop_flag"].cpu().tolist()
-        ret_waveforms = []
-        for i, pad_len in enumerate(pad_lengths):
-            ret_waveforms.append(
-                vae_decoder_outputs[
-                    i,
-                    pad_len * self.vae.decoder_chunk_size : (pad_len + self.patch_size) * self.vae.decoder_chunk_size,
-                ]
+
+        # Decide per sequence whether to VAE-decode this step. With
+        # decode_every == 1 every row decodes (original behavior). Otherwise a
+        # row decodes once it holds decode_every patches, or when it must
+        # flush (model stop / max_len about to hit).
+        pend_counts = []
+        decode_rows = []
+        for i, seq in enumerate(seqs):
+            pend = seq.custom_payload.pending_feats
+            n_pend = 0 if pend is None else pend.shape[0]
+            pend_counts.append(n_pend)
+            do = (
+                self.decode_every <= 1
+                or n_pend + self.patch_size >= self.decode_every * self.patch_size
+                or stop_flag[i] == 1
+                or seq.custom_payload.force_flush
             )
+            if do:
+                decode_rows.append(i)
+
+        cs = self.vae.decoder_chunk_size
+        ret_waveforms: list = [None] * len(seqs)
+        if decode_rows:
+            max_w = max(pad_lengths[i] + pend_counts[i] + self.patch_size for i in decode_rows)
+            vae_decoder_inputs = torch.zeros(len(decode_rows), max_w, self.feat_dim, dtype=self.vae_dtype, device="cuda")
+            for r, i in enumerate(decode_rows):
+                seq = seqs[i]
+                pad_len = pad_lengths[i]
+                n_pend = pend_counts[i]
+                if pad_len > 0:
+                    vae_decoder_inputs[r, :pad_len] = torch.from_numpy(seq.custom_payload.padding_decode).cuda(
+                        non_blocking=True
+                    ).to(self.vae_dtype)
+                if n_pend > 0:
+                    vae_decoder_inputs[r, pad_len : pad_len + n_pend] = torch.from_numpy(
+                        seq.custom_payload.pending_feats
+                    ).cuda(non_blocking=True).to(self.vae_dtype)
+                vae_decoder_inputs[r, pad_len + n_pend : pad_len + n_pend + self.patch_size] = latents[i].to(
+                    self.vae_dtype
+                )
+
+            vae_out = None
+            if self.vae_graph_enabled:
+                vae_out = self._vae_decode_graphed(vae_decoder_inputs)
+            if vae_out is None:
+                vae_out = self.vae.decode(vae_decoder_inputs.permute(0, 2, 1))
+            vae_decoder_outputs = vae_out[:, 0, :].float().cpu().numpy()
+            for r, i in enumerate(decode_rows):
+                start = pad_lengths[i] * cs
+                end = (pad_lengths[i] + pend_counts[i] + self.patch_size) * cs
+                ret_waveforms[i] = vae_decoder_outputs[r, start:end]
 
         np_latents = latents.to(torch.float32).cpu().numpy()
         return [

@@ -1,6 +1,6 @@
 # AGENTS.md (voicingtts-nanovllm)
 
-This repository is a Python package (`voicingtts-nanovllm`) plus a deployment server.
+This repository is a Python package (`voicingtts-nanovllm`).
 It is GPU-centric (PyTorch + Triton + flash-attn); many runtime paths assume CUDA.
 
 - Python: >=3.10,<3.13 (see `pyproject.toml`)
@@ -11,7 +11,6 @@ It is GPU-centric (PyTorch + Triton + flash-attn); many runtime paths assume CUD
 - `voicingtts_nanovllm/`: core library
 - `voicingtts_nanovllm/engine/`: scheduler, KV cache, runner lifecycle
 - `voicingtts_nanovllm/models/voicingtts/`: VoicingTTS model integration (engine/server/runner/model)
-- `deployment/`: deployment server (`deployment/app/main.py`)
 - `tests/`: pytest tests (mostly `tests/unit/`)
 
 ## Docs Worth Reading First
@@ -25,23 +24,9 @@ Use the lockfile (recommended):
 uv sync --frozen
 ```
 
-Deployment server deps:
-
-`deployment/` is a uv workspace member; install from repo root:
-
-```bash
-uv sync --all-packages --frozen
-```
-
-Or, only the deployment service:
-
-```bash
-uv sync --package voicingtts-nanovllm-deployment --frozen
-```
-
 Notes:
 - Run commands inside the managed env: `uv run <cmd...>`
-- Prefer `uv sync --frozen`/`uv sync --all-packages --frozen` to keep `uv.lock` stable
+- Prefer `uv sync --frozen` to keep `uv.lock` stable
 
 ## Run
 
@@ -50,33 +35,11 @@ Core example:
 uv run python example.py
 ```
 
-Deployment server:
-```bash
-uv run fastapi run deployment/app/main.py
-```
-
-## Benchmark
-
-End-to-end inference benchmark:
-
-```bash
-uv run python benchmark/bench_inference.py --model ~/voicingtts --devices 0 --concurrency 1 --warmup 1 --iters 5
-```
-
-Use a longer English prompt (~100 words):
-
-```bash
-uv run python benchmark/bench_inference.py --model ~/voicingtts --devices 0 --concurrency 1 --warmup 1 --iters 5 \
-  --target-text-file benchmark/target_text_100w_en.txt
-```
-
-Tip: if you hit CUDA OOM, lower `--concurrency`, reduce `--max-generate-length`, or switch to a less-busy GPU.
-
 ## Build / Lint / Test
 
 ### Quick Sanity (syntax)
 ```bash
-uv run python -m compileall voicingtts_nanovllm deployment tests
+uv run python -m compileall voicingtts_nanovllm tests
 ```
 
 ### Build (sdist/wheel)

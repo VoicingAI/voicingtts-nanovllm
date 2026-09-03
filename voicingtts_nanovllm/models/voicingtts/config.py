@@ -9,7 +9,7 @@ class RopeScalingConfig(BaseModel):
     original_max_position_embeddings: int
 
 
-class VoicingLMConfig(BaseModel):
+class BackboneConfig(BaseModel):
     bos_token_id: int
     eos_token_id: int
     hidden_size: int
@@ -95,7 +95,7 @@ class LoRAConfig(BaseModel):
 
 
 class VoicingTTSConfig(BaseModel):
-    lm_config: VoicingLMConfig
+    lm_config: BackboneConfig
     patch_size: int = 2
     feat_dim: int = 64
     residual_lm_num_layers: int = 6

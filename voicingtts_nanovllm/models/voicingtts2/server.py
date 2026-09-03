@@ -248,8 +248,11 @@ def main_loop(queue_in: mp.Queue, queue_out: mp.Queue, args, kwargs):
 
             output = srv.step()
             for seq in output:
-                latest_waveform = seq.custom_payload.generated_waveforms[-1]
-                queue_out.put({"type": "stream", "id": seq.seq_id, "data": latest_waveform})
+                # decode-every-N: new_waveform is None on steps where the VAE
+                # decode was skipped for this sequence — emit only real audio.
+                latest_waveform = seq.custom_payload.new_waveform
+                if latest_waveform is not None:
+                    queue_out.put({"type": "stream", "id": seq.seq_id, "data": latest_waveform})
                 if seq.is_finished:
                     queue_out.put({"type": "stream", "id": seq.seq_id, "data": None})
 

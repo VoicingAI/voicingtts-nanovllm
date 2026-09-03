@@ -66,7 +66,7 @@ extend-exclude = '''
 [tool.ruff]
 line-length = 120
 target-version = "py310"
-extend-exclude = ["tests", "deployment/tests"]
+extend-exclude = ["tests"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -75,7 +75,7 @@ python_version = "3.10"
 # non-library entrypoints/tests from typechecking.
 ignore_missing_imports = true
 no_implicit_optional = false
-exclude = "^(tests/|deployment/tests/|benchmark/|example.*\\.py$)"
+exclude = "^(tests/|example.*\\.py$)"
 
 warn_unused_ignores = true
 
@@ -97,8 +97,6 @@ flash-attn = [
     "ninja",
 ]
 
-[tool.uv.workspace]
-members = ["deployment"]
 
 [dependency-groups]
 dev = [
