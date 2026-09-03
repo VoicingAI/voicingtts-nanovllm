@@ -21,7 +21,7 @@ from voicingtts_nanovllm.layers.embed_head import VocabParallelEmbedding
 import math
 
 from voicingtts_nanovllm.models.voicingtts.config import (
-    MiniCPM4Config,
+    VoicingLMConfig,
     CfmConfig,
     VoicingTTSConfig,
     LoRAConfig,
@@ -43,7 +43,7 @@ def rotate_half(x):
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
-    This is equivalent to the MiniCPM modeling implementation.
+    This mirrors the reference language-model implementation.
     """
     orig_dtype = k.dtype
     cos = cos[position_ids].unsqueeze(unsqueeze_dim)  # [bs, 1, seq_len, dim]
@@ -55,8 +55,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     return q_embed.to(dtype=orig_dtype), k_embed.to(dtype=orig_dtype)
 
 
-class MiniCPMLongRoPE(nn.Module):
-    """MiniCPM LongRoPE implementation equivalent to modeling_minicpm.py"""
+class VoicingLongRoPE(nn.Module):
+    """LongRoPE implementation matching the reference language model."""
 
     def __init__(
         self,
@@ -133,7 +133,7 @@ class MiniCPMLongRoPE(nn.Module):
         return query, key
 
     def _apply_rotary_emb(self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
-        """Apply rotary embedding with corrected math matching modeling_minicpm.py"""
+        """Apply rotary embedding using the reference model's corrected math."""
         # x: [num_tokens, num_heads, head_dim]
         # cos/sin: [num_tokens, head_dim] from _set_cos_sin_cache (already repeated)
 
@@ -161,7 +161,7 @@ def get_cpm4_rope(
     rope_scaling: dict | None = None,
 ):
     """Get CPM4 LongRoPE implementation"""
-    rotary_emb = MiniCPMLongRoPE(
+    rotary_emb = VoicingLongRoPE(
         head_size=head_size,
         rotary_dim=rotary_dim,
         max_position_embeddings=max_position,
@@ -395,7 +395,7 @@ class Cpm4MLP(nn.Module):
 class Cpm4DecoderLayer(nn.Module):
     def __init__(
         self,
-        config: MiniCPM4Config,
+        config: VoicingLMConfig,
         is_causal: bool = True,
         lora_config: Optional[LoRAConfig] = None,
         lora_domain: str = LM_LORA_DOMAIN,
@@ -424,7 +424,7 @@ class Cpm4DecoderLayer(nn.Module):
         )
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        # depth scaling like MiniCPM
+        # depth scaling, as the reference language model does
         self.scale_depth = getattr(config, "scale_depth", 1.0)
         self.num_hidden_layers = config.num_hidden_layers
 
@@ -451,7 +451,7 @@ class Cpm4DecoderLayer(nn.Module):
 class Cpm4Model(nn.Module):
     def __init__(
         self,
-        config: MiniCPM4Config,
+        config: VoicingLMConfig,
         is_causal: bool = True,
         lora_config: Optional[LoRAConfig] = None,
         lora_domain: str = LM_LORA_DOMAIN,
@@ -535,7 +535,7 @@ class VoicingTTSLocDiT(nn.Module):
 
     def __init__(
         self,
-        config: MiniCPM4Config,
+        config: VoicingLMConfig,
         in_channels: int = 64,
         lora_config: Optional[LoRAConfig] = None,
     ):
@@ -730,7 +730,7 @@ class UnifiedCFM(torch.nn.Module):
 
 
 class VoicingTTSLocEnc(nn.Module):
-    def __init__(self, config: MiniCPM4Config, input_dim: int = 64):
+    def __init__(self, config: VoicingLMConfig, input_dim: int = 64):
         super().__init__()
         self.config = config
         self.special_token = nn.Parameter(torch.empty(1, 1, 1, config.hidden_size))

@@ -6,14 +6,14 @@ torch = pytest.importorskip("torch")
 def _make_config(residual_lm_no_rope: bool):
     from voicingtts_nanovllm.models.voicingtts2.config import (
         CfmConfig,
-        MiniCPM4Config,
+        VoicingLMConfig,
         RopeScalingConfig,
         VoicingTTS2Config,
         VoicingTTS2DitConfig,
         VoicingTTS2EncoderConfig,
     )
 
-    lm_config = MiniCPM4Config(
+    lm_config = VoicingLMConfig(
         bos_token_id=0,
         eos_token_id=1,
         hidden_size=8,
