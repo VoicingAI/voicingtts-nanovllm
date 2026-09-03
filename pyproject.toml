@@ -75,7 +75,7 @@ python_version = "3.10"
 # non-library entrypoints/tests from typechecking.
 ignore_missing_imports = true
 no_implicit_optional = false
-exclude = "^(tests/|example.*\\.py$)"
+exclude = "^tests/"
 
 warn_unused_ignores = true
 
