@@ -1,8 +1,7 @@
 # VoicingTTS-NanoVLLM
 
 Voicing AI's TTS inference engine — concurrent request batching, async API, GPU-only
-(Triton + FlashAttention). Ships the `voicingtts_nanovllm` package plus an optional
-FastAPI demo under `deployment/`.
+(Triton + FlashAttention). Ships the `voicingtts_nanovllm` package.
 
 ```bash
 pip install "git+https://github.com/VoicingAI/voicingtts-nanovllm.git"
@@ -19,4 +18,4 @@ server = VoicingTTS.from_pretrained("/models/ttsv2", devices=[0])
 `from_pretrained` returns an async pool inside an event loop, otherwise a sync pool,
 and selects the runner from the `architecture` field of the checkpoint's `config.json`.
 
-See `ARCHITECTURE.md` for internals, `CONTRIBUTING.md` to develop, `deployment/` to serve.
+See `ARCHITECTURE.md` for internals and `CONTRIBUTING.md` to develop.

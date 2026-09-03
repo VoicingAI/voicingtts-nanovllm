@@ -259,9 +259,9 @@ def test_solve_euler_preserves_input_for_zero_flow_and_zeroes_dt_outside_mean_mo
 
 
 def test_longrope_forward_matches_token_helper():
-    from voicingtts_nanovllm.models.voicingtts2.model import VoicingLongRoPE
+    from voicingtts_nanovllm.models.voicingtts2.model import BackboneLongRoPE
 
-    rope = VoicingLongRoPE(8, 8, 16, 10000.0)
+    rope = BackboneLongRoPE(8, 8, 16, 10000.0)
     positions = torch.tensor([1, 3])
     query = torch.randn(2, 16)
     key = torch.randn(2, 8)
@@ -321,7 +321,7 @@ def test_attention_and_mlp_select_lora_layers_on_cpu(monkeypatch):
         target_modules_lm=["q_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
     )
 
-    attention = voicingtts2_model.Cpm4Attention(
+    attention = voicingtts2_model.BackboneAttention(
         hidden_size=8,
         num_heads=2,
         num_kv_heads=2,
@@ -330,7 +330,7 @@ def test_attention_and_mlp_select_lora_layers_on_cpu(monkeypatch):
         apply_qk_norm=True,
         lora_config=lora_config,
     )
-    mlp = voicingtts2_model.Cpm4MLP(hidden_size=8, intermediate_size=16, lora_config=lora_config)
+    mlp = voicingtts2_model.BackboneMLP(hidden_size=8, intermediate_size=16, lora_config=lora_config)
 
     assert isinstance(attention.qkv_proj, _InertLayer)
     assert isinstance(attention.o_proj, _InertLayer)

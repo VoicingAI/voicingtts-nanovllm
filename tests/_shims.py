@@ -1,4 +1,4 @@
-"""Shared GPU/optional-dep shims for unit and deployment tests.
+"""Shared GPU/optional-dep shims for unit tests.
 
 These are installed in sys.modules ONLY when the real packages aren't available.
 Import this module in conftest.py via pytest_configure (or at module level) to

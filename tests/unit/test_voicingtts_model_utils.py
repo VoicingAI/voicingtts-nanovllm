@@ -130,7 +130,7 @@ def test_apply_rotary_pos_emb_numerical_sanity():
 
 
 # ---------------------------------------------------------------------------
-# VoicingLongRoPE._apply_rotary_emb (extracted as apply_rotary_emb_tokens)
+# BackboneLongRoPE._apply_rotary_emb (extracted as apply_rotary_emb_tokens)
 # ---------------------------------------------------------------------------
 
 
@@ -450,9 +450,9 @@ def test_apply_classifier_free_guidance_uses_optimal_negative_scale():
 
 
 def test_longrope_rotates_cpu_queries_and_keys():
-    from voicingtts_nanovllm.models.voicingtts.model import VoicingLongRoPE
+    from voicingtts_nanovllm.models.voicingtts.model import BackboneLongRoPE
 
-    rope = VoicingLongRoPE(
+    rope = BackboneLongRoPE(
         head_size=4,
         rotary_dim=4,
         max_position_embeddings=8,
@@ -487,7 +487,7 @@ def test_cpu_module_wrappers_preserve_expected_shapes():
 def test_decoder_and_model_wrappers_apply_residuals_without_attention_kernel():
     import torch.nn as nn
 
-    from voicingtts_nanovllm.models.voicingtts.model import Cpm4DecoderLayer, Cpm4Model
+    from voicingtts_nanovllm.models.voicingtts.model import BackboneDecoderLayer, BackboneModel
 
     class AddOne(nn.Module):
         def forward(self, positions, hidden_states):
@@ -497,7 +497,7 @@ def test_decoder_and_model_wrappers_apply_residuals_without_attention_kernel():
         def forward(self, hidden_states):
             return hidden_states * 2
 
-    decoder = Cpm4DecoderLayer.__new__(Cpm4DecoderLayer)
+    decoder = BackboneDecoderLayer.__new__(BackboneDecoderLayer)
     nn.Module.__init__(decoder)
     decoder.input_layernorm = nn.Identity()
     decoder.self_attn = AddOne()
@@ -509,7 +509,7 @@ def test_decoder_and_model_wrappers_apply_residuals_without_attention_kernel():
     assert torch.equal(decoder_output, torch.full((2, 3), 9.0))
     assert torch.equal(residual, torch.full((2, 3), 3.0))
 
-    model = Cpm4Model.__new__(Cpm4Model)
+    model = BackboneModel.__new__(BackboneModel)
     nn.Module.__init__(model)
     model.layers = nn.ModuleList([decoder])
     model.norm = nn.Identity()
@@ -608,10 +608,10 @@ def test_voicingtts_model_forward_uses_cpu_bookkeeping_with_stubbed_submodules(m
     assert torch.equal(result["stop_flag"], torch.tensor([1, 1]))
 
 
-def _mini_cpm_config(num_hidden_layers=1):
-    from voicingtts_nanovllm.models.voicingtts.config import VoicingLMConfig
+def _backbone_config(num_hidden_layers=1):
+    from voicingtts_nanovllm.models.voicingtts.config import BackboneConfig
 
-    return VoicingLMConfig(
+    return BackboneConfig(
         bos_token_id=0,
         eos_token_id=1,
         hidden_size=8,
@@ -641,9 +641,9 @@ def test_cpu_constructors_wire_attention_mlp_decoder_and_model(monkeypatch):
     import voicingtts_nanovllm.models.voicingtts.model as model_module
 
     monkeypatch.setattr(model_module, "get_tp_world_size", lambda: 1)
-    config = _mini_cpm_config()
+    config = _backbone_config()
 
-    attention = model_module.Cpm4Attention(
+    attention = model_module.BackboneAttention(
         hidden_size=config.hidden_size,
         num_heads=config.num_attention_heads,
         num_kv_heads=config.num_key_value_heads,
@@ -652,9 +652,9 @@ def test_cpu_constructors_wire_attention_mlp_decoder_and_model(monkeypatch):
         rope_scaling=config.rope_scaling,
         apply_qk_norm=True,
     )
-    mlp = model_module.Cpm4MLP(config.hidden_size, config.intermediate_size)
-    decoder = model_module.Cpm4DecoderLayer(config)
-    transformer = model_module.Cpm4Model(config, is_causal=False)
+    mlp = model_module.BackboneMLP(config.hidden_size, config.intermediate_size)
+    decoder = model_module.BackboneDecoderLayer(config)
+    transformer = model_module.BackboneModel(config, is_causal=False)
 
     assert attention.q_size == 8
     assert attention.kv_size == 8
@@ -668,7 +668,7 @@ def test_dit_constructor_builds_cpu_reachable_projection_stack(monkeypatch):
     import voicingtts_nanovllm.models.voicingtts.model as model_module
 
     monkeypatch.setattr(model_module, "get_tp_world_size", lambda: 1)
-    dit = model_module.VoicingTTSLocDiT(_mini_cpm_config(), in_channels=3)
+    dit = model_module.VoicingTTSLocDiT(_backbone_config(), in_channels=3)
 
     assert dit.in_channels == 3
     assert dit.out_channels == 3

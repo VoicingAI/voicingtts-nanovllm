@@ -6,14 +6,14 @@ torch = pytest.importorskip("torch")
 def _make_config(residual_lm_no_rope: bool):
     from voicingtts_nanovllm.models.voicingtts2.config import (
         CfmConfig,
-        VoicingLMConfig,
+        BackboneConfig,
         RopeScalingConfig,
         VoicingTTS2Config,
         VoicingTTS2DitConfig,
         VoicingTTS2EncoderConfig,
     )
 
-    lm_config = VoicingLMConfig(
+    lm_config = BackboneConfig(
         bos_token_id=0,
         eos_token_id=1,
         hidden_size=8,
@@ -67,7 +67,7 @@ def test_voicingtts2_model_disables_rope_only_for_residual_lm(monkeypatch):
 
     captured_use_rope = []
 
-    class FakeCpm4Model(torch.nn.Module):
+    class FakeBackboneModel(torch.nn.Module):
         def __init__(self, config, is_causal=True, lora_config=None, use_rope=True, lora_domain="lm_domain"):
             super().__init__()
             captured_use_rope.append(use_rope)
@@ -76,10 +76,10 @@ def test_voicingtts2_model_disables_rope_only_for_residual_lm(monkeypatch):
         def forward(self, input_embeds, positions):
             return input_embeds
 
-    monkeypatch.setattr(voicingtts2_model, "Cpm4Model", FakeCpm4Model)
+    monkeypatch.setattr(voicingtts2_model, "BackboneModel", FakeBackboneModel)
 
     model = voicingtts2_model.VoicingTTS2Model(_make_config(residual_lm_no_rope=True), inference_timesteps=2)
 
-    assert isinstance(model.base_lm, FakeCpm4Model)
-    assert isinstance(model.residual_lm, FakeCpm4Model)
+    assert isinstance(model.base_lm, FakeBackboneModel)
+    assert isinstance(model.residual_lm, FakeBackboneModel)
     assert captured_use_rope == [True, False, True, True]

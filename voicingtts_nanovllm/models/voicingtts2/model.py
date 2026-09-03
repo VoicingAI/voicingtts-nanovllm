@@ -14,7 +14,7 @@ from voicingtts_nanovllm.layers.lora import (
     LoRAQKVParallelLinear,
     LoRARowParallelLinear,
 )
-from voicingtts_nanovllm.models.voicingtts2.config import CfmConfig, LoRAConfig, VoicingLMConfig, VoicingTTS2Config
+from voicingtts_nanovllm.models.voicingtts2.config import CfmConfig, LoRAConfig, BackboneConfig, VoicingTTS2Config
 from voicingtts_nanovllm.models.voicingtts2.model_utils import (
     EulerSolverConfig,
     EulerSolverInputs,
@@ -39,7 +39,7 @@ from voicingtts_nanovllm.utils.context import (
 from voicingtts_nanovllm.utils.distributed import get_tp_world_size
 
 
-class VoicingLongRoPE(nn.Module):
+class BackboneLongRoPE(nn.Module):
     def __init__(
         self,
         head_size: int,
@@ -94,8 +94,8 @@ class VoicingLongRoPE(nn.Module):
         return query, key
 
 
-def get_cpm4_rope(head_size: int, rotary_dim: int, max_position: int, base: float, rope_scaling=None):
-    return VoicingLongRoPE(
+def get_backbone_rope(head_size: int, rotary_dim: int, max_position: int, base: float, rope_scaling=None):
+    return BackboneLongRoPE(
         head_size=head_size,
         rotary_dim=rotary_dim,
         max_position_embeddings=max_position,
@@ -106,7 +106,7 @@ def get_cpm4_rope(head_size: int, rotary_dim: int, max_position: int, base: floa
     )
 
 
-class Cpm4Attention(nn.Module):
+class BackboneAttention(nn.Module):
     def __init__(
         self,
         hidden_size: int,
@@ -178,7 +178,7 @@ class Cpm4Attention(nn.Module):
             self.o_proj = RowParallelLinear(self.total_num_heads * self.head_dim, hidden_size, bias=qkv_bias)
 
         self.rotary_emb = (
-            get_cpm4_rope(self.head_dim, self.head_dim, self.max_position, rope_theta, rope_scaling)
+            get_backbone_rope(self.head_dim, self.head_dim, self.max_position, rope_theta, rope_scaling)
             if self.use_rope
             else None
         )
@@ -216,7 +216,7 @@ class Cpm4Attention(nn.Module):
         return self.o_proj(out)
 
 
-class Cpm4MLP(nn.Module):
+class BackboneMLP(nn.Module):
     def __init__(
         self,
         hidden_size: int,
@@ -259,17 +259,17 @@ class Cpm4MLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_up_proj(x)))
 
 
-class Cpm4DecoderLayer(nn.Module):
+class BackboneDecoderLayer(nn.Module):
     def __init__(
         self,
-        config: VoicingLMConfig,
+        config: BackboneConfig,
         is_causal: bool = True,
         lora_config: Optional[LoRAConfig] = None,
         use_rope: bool = True,
         lora_domain: str = LM_LORA_DOMAIN,
     ) -> None:
         super().__init__()
-        self.self_attn = Cpm4Attention(
+        self.self_attn = BackboneAttention(
             hidden_size=config.hidden_size,
             num_heads=config.num_attention_heads,
             num_kv_heads=config.num_key_value_heads,
@@ -285,7 +285,7 @@ class Cpm4DecoderLayer(nn.Module):
             lora_config=lora_config,
             lora_domain=lora_domain,
         )
-        self.mlp = Cpm4MLP(
+        self.mlp = BackboneMLP(
             config.hidden_size,
             config.intermediate_size,
             lora_config=lora_config,
@@ -304,10 +304,10 @@ class Cpm4DecoderLayer(nn.Module):
         return hidden_states, residual
 
 
-class Cpm4Model(nn.Module):
+class BackboneModel(nn.Module):
     def __init__(
         self,
-        config: VoicingLMConfig,
+        config: BackboneConfig,
         is_causal: bool = True,
         lora_config: Optional[LoRAConfig] = None,
         use_rope: bool = True,
@@ -320,7 +320,7 @@ class Cpm4Model(nn.Module):
         )
         self.layers = nn.ModuleList(
             [
-                Cpm4DecoderLayer(config, is_causal, lora_config, use_rope=use_rope, lora_domain=lora_domain)
+                BackboneDecoderLayer(config, is_causal, lora_config, use_rope=use_rope, lora_domain=lora_domain)
                 for _ in range(config.num_hidden_layers)
             ]
         )
@@ -356,7 +356,7 @@ class TimestepEmbedding(nn.Module):
 
 
 class VoicingTTS2LocDiT(nn.Module):
-    def __init__(self, config: VoicingLMConfig, in_channels: int = 64, lora_config: Optional[LoRAConfig] = None):
+    def __init__(self, config: BackboneConfig, in_channels: int = 64, lora_config: Optional[LoRAConfig] = None):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = in_channels
@@ -377,7 +377,7 @@ class VoicingTTS2LocDiT(nn.Module):
                 target_modules_dit=[],
                 target_proj_modules=[],
             )
-        self.decoder = Cpm4Model(
+        self.decoder = BackboneModel(
             config,
             is_causal=False,
             lora_config=dit_lora_config,
@@ -458,11 +458,11 @@ class UnifiedCFM(nn.Module):
 
 
 class VoicingTTS2LocEnc(nn.Module):
-    def __init__(self, config: VoicingLMConfig, input_dim: int = 64):
+    def __init__(self, config: BackboneConfig, input_dim: int = 64):
         super().__init__()
         self.special_token = nn.Parameter(torch.empty(1, 1, 1, config.hidden_size))
         self.in_proj = nn.Linear(input_dim, config.hidden_size, bias=True)
-        self.encoder = Cpm4Model(config, is_causal=False)
+        self.encoder = BackboneModel(config, is_causal=False)
 
     def forward(self, x):
         t, _, _ = x.size()
@@ -505,12 +505,12 @@ class VoicingTTS2Model(nn.Module):
         assert not self.config.lm_config.use_mup, "mup inference is not supported now"
 
         lm_lora_config = lora_config if (lora_config and lora_config.enable_lm) else None
-        self.base_lm = Cpm4Model(config.lm_config, lora_config=lm_lora_config)
+        self.base_lm = BackboneModel(config.lm_config, lora_config=lm_lora_config)
 
         residual_lm_config = config.lm_config.model_copy(deep=True)
         residual_lm_config.num_hidden_layers = config.residual_lm_num_layers
         residual_lm_config.vocab_size = 0
-        self.residual_lm = Cpm4Model(
+        self.residual_lm = BackboneModel(
             residual_lm_config,
             lora_config=lm_lora_config,
             use_rope=not config.residual_lm_no_rope,

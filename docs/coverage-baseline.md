@@ -28,11 +28,6 @@ Command: `bash scripts/coverage.sh`
 
 | Name | Stmts | Miss | Branch | BrPart | Cover | Missing |
 |------|------:|-----:|-------:|-------:|------:|---------|
-| deployment/app/api/routes/generate.py | 140 | 12 | 60 | 6 | 90% | 170-171, 195, 198-199, 208, 216->220, 221, 227-228, 231-233, 247->250 |
-| deployment/app/core/config.py | 165 | 4 | 56 | 4 | 96% | 182, 186, 190, 231 |
-| deployment/app/core/lifespan.py | 46 | 2 | 12 | 4 | 90% | 24, 29, 38->42, 67->exit |
-| deployment/app/core/metrics.py | 55 | 14 | 4 | 1 | 71% | 90-106 |
-| deployment/app/services/mp3.py | 118 | 9 | 26 | 2 | 92% | 43->39, 108->112, 119-120, 136, 155-156, 159-160, 165-166 |
 | voicingtts_nanovllm/__init__.py | 10 | 6 | 0 | 0 | 40% | 5-11 |
 | voicingtts_nanovllm/engine/block_manager.py | 94 | 2 | 26 | 3 | 96% | 108, 146, 173->exit |
 | voicingtts_nanovllm/engine/llm_engine.py | 105 | 4 | 20 | 1 | 96% | 155-156, 186-187, 205->204 |
@@ -77,6 +72,5 @@ Coverage XML written to file coverage.xml
 
 ## Notes
 
-- `deployment/client.py` is omitted from coverage because it is a demo entrypoint requiring a live server.
 - GPU-only paths (Triton kernels, flash_attn calls, model forward passes) are intentionally excluded with `@pytest.mark.gpu` and `# pragma: no cover`.
 - This document is the committed baseline referenced by todo 8 for the combined coverage ratchet toward `fail_under=68`.

@@ -20,7 +20,7 @@ from voicingtts_nanovllm.layers.embed_head import VocabParallelEmbedding
 from voicingtts_nanovllm.models.voicingtts.config import (
     CfmConfig,
     LoRAConfig,
-    VoicingLMConfig,
+    BackboneConfig,
     VoicingTTSConfig,
 )
 from voicingtts_nanovllm.models.voicingtts.model_utils import (
@@ -48,8 +48,8 @@ from voicingtts_nanovllm.utils.context import (
 from voicingtts_nanovllm.utils.distributed import get_tp_world_size
 
 
-class VoicingLongRoPE(nn.Module):
-    """LongRoPE implementation matching the reference language model."""
+class BackboneLongRoPE(nn.Module):
+    """LongRoPE implementation matching the backbone."""
 
     def __init__(
         self,
@@ -122,15 +122,15 @@ class VoicingLongRoPE(nn.Module):
         return query, key
 
 
-def get_cpm4_rope(
+def get_backbone_rope(
     head_size: int,
     rotary_dim: int,
     max_position: int,
     base: float,
     rope_scaling: dict | None = None,
 ):
-    """Get CPM4 LongRoPE implementation"""
-    rotary_emb = VoicingLongRoPE(
+    """Get the backbone LongRoPE implementation"""
+    rotary_emb = BackboneLongRoPE(
         head_size=head_size,
         rotary_dim=rotary_dim,
         max_position_embeddings=max_position,
@@ -142,7 +142,7 @@ def get_cpm4_rope(
     return rotary_emb
 
 
-class Cpm4Attention(nn.Module):
+class BackboneAttention(nn.Module):
     def __init__(
         self,
         hidden_size: int,
@@ -220,7 +220,7 @@ class Cpm4Attention(nn.Module):
                 hidden_size,
                 bias=qkv_bias,
             )
-        self.rotary_emb = get_cpm4_rope(
+        self.rotary_emb = get_backbone_rope(
             head_size=self.head_dim,
             rotary_dim=self.head_dim,
             max_position=self.max_position,
@@ -297,7 +297,7 @@ class Cpm4Attention(nn.Module):
         return output
 
 
-class Cpm4MLP(nn.Module):
+class BackboneMLP(nn.Module):
     def __init__(
         self,
         hidden_size: int,
@@ -361,16 +361,16 @@ class Cpm4MLP(nn.Module):
         return x
 
 
-class Cpm4DecoderLayer(nn.Module):
+class BackboneDecoderLayer(nn.Module):
     def __init__(
         self,
-        config: VoicingLMConfig,
+        config: BackboneConfig,
         is_causal: bool = True,
         lora_config: Optional[LoRAConfig] = None,
         lora_domain: str = LM_LORA_DOMAIN,
     ) -> None:
         super().__init__()
-        self.self_attn = Cpm4Attention(
+        self.self_attn = BackboneAttention(
             hidden_size=config.hidden_size,
             num_heads=config.num_attention_heads,
             num_kv_heads=config.num_key_value_heads,
@@ -385,7 +385,7 @@ class Cpm4DecoderLayer(nn.Module):
             lora_config=lora_config,
             lora_domain=lora_domain,
         )
-        self.mlp = Cpm4MLP(
+        self.mlp = BackboneMLP(
             hidden_size=config.hidden_size,
             intermediate_size=config.intermediate_size,
             lora_config=lora_config,
@@ -393,7 +393,7 @@ class Cpm4DecoderLayer(nn.Module):
         )
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        # depth scaling, as the reference language model does
+        # depth scaling, as the backbone does
         self.scale_depth = getattr(config, "scale_depth", 1.0)
         self.num_hidden_layers = config.num_hidden_layers
 
@@ -417,10 +417,10 @@ class Cpm4DecoderLayer(nn.Module):
         return hidden_states, residual
 
 
-class Cpm4Model(nn.Module):
+class BackboneModel(nn.Module):
     def __init__(
         self,
-        config: VoicingLMConfig,
+        config: BackboneConfig,
         is_causal: bool = True,
         lora_config: Optional[LoRAConfig] = None,
         lora_domain: str = LM_LORA_DOMAIN,
@@ -435,7 +435,7 @@ class Cpm4Model(nn.Module):
 
         self.layers = nn.ModuleList(
             [
-                Cpm4DecoderLayer(config, is_causal, lora_config, lora_domain=lora_domain)
+                BackboneDecoderLayer(config, is_causal, lora_config, lora_domain=lora_domain)
                 for _ in range(config.num_hidden_layers)
             ]
         )
@@ -496,7 +496,7 @@ class VoicingTTSLocDiT(nn.Module):
 
     def __init__(
         self,
-        config: VoicingLMConfig,
+        config: BackboneConfig,
         in_channels: int = 64,
         lora_config: Optional[LoRAConfig] = None,
     ):
@@ -530,7 +530,7 @@ class VoicingTTSLocDiT(nn.Module):
                 target_modules_lm=lora_config.target_modules_dit,  # Use DiT targets
                 target_modules_dit=[],
             )
-        self.decoder = Cpm4Model(config, is_causal=False, lora_config=dit_lora_config, lora_domain=DIT_LORA_DOMAIN)
+        self.decoder = BackboneModel(config, is_causal=False, lora_config=dit_lora_config, lora_domain=DIT_LORA_DOMAIN)
 
     def forward(
         self,
@@ -686,14 +686,14 @@ class UnifiedCFM(torch.nn.Module):
 
 
 class VoicingTTSLocEnc(nn.Module):
-    def __init__(self, config: VoicingLMConfig, input_dim: int = 64):
+    def __init__(self, config: BackboneConfig, input_dim: int = 64):
         super().__init__()
         self.config = config
         self.special_token = nn.Parameter(torch.empty(1, 1, 1, config.hidden_size))
         self.in_proj = nn.Linear(input_dim, config.hidden_size, bias=True)
 
         assert config.vocab_size == 0, "vocab_size must be 0 for local encoder"
-        self.encoder = Cpm4Model(config, is_causal=False)
+        self.encoder = BackboneModel(config, is_causal=False)
 
     def forward(self, x):
         """
@@ -751,13 +751,13 @@ class VoicingTTSModel(nn.Module):
         lm_lora_config = lora_config if (lora_config and lora_config.enable_lm) else None
 
         # Text-Semantic LM
-        self.base_lm = Cpm4Model(config.lm_config, lora_config=lm_lora_config)
+        self.base_lm = BackboneModel(config.lm_config, lora_config=lm_lora_config)
 
         # Residual Acoustic LM
         residual_lm_config = config.lm_config.model_copy(deep=True)
         residual_lm_config.num_hidden_layers = config.residual_lm_num_layers
         residual_lm_config.vocab_size = 0
-        self.residual_lm = Cpm4Model(residual_lm_config, lora_config=lm_lora_config)
+        self.residual_lm = BackboneModel(residual_lm_config, lora_config=lm_lora_config)
 
         # Local Encoder (no LoRA for encoder)
         encoder_config = config.lm_config.model_copy(deep=True)

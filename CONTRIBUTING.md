@@ -21,7 +21,6 @@ Two test roots, both discovered by a plain `uv run pytest`:
 | Root | What it covers |
 |---|---|
 | `tests/unit/` | Core library (`voicingtts_nanovllm/`) |
-| `deployment/tests/` | FastAPI server (`deployment/app/`) |
 
 `conftest.py` in `tests/unit/` registers the `gpu` marker and installs import shims before any test
 module is collected, so GPU-absent imports don't fail at collection time.

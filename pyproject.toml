@@ -47,7 +47,7 @@ where = ["."]
 include = ["voicingtts_nanovllm*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "deployment/tests"]
+testpaths = ["tests"]
 addopts = "--strict-markers --import-mode=importlib"
 markers = [
     "gpu: requires a real CUDA GPU (deselect with -m 'not gpu')",
@@ -75,8 +75,8 @@ extend-exclude = '''
 branch = true
 parallel = true
 relative_files = true
-source = ["voicingtts_nanovllm", "deployment/app"]
-omit = ["deployment/tests/*", "tests/*", "deployment/client.py"]
+source = ["voicingtts_nanovllm"]
+omit = ["tests/*"]
 dynamic_context = "test_function"
 
 [tool.coverage.report]
@@ -92,14 +92,12 @@ exclude_also = [
 source = [
     "voicingtts_nanovllm/",
     "/__w/voicingtts-nanovllm/voicingtts-nanovllm/voicingtts_nanovllm/",
-    "deployment/app/",
-    "/__w/voicingtts-nanovllm/voicingtts-nanovllm/deployment/app/",
 ]
 
 [tool.ruff]
 line-length = 120
 target-version = "py310"
-extend-exclude = ["tests", "deployment/tests"]
+extend-exclude = ["tests"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -108,7 +106,7 @@ python_version = "3.10"
 # non-library entrypoints/tests from typechecking.
 ignore_missing_imports = true
 no_implicit_optional = false
-exclude = "^(tests/|deployment/tests/|benchmark/|example.*\\.py$)"
+exclude = "^(tests/|example.*\\.py$)"
 
 warn_unused_ignores = true
 
@@ -130,8 +128,6 @@ flash-attn = [
     "ninja",
 ]
 
-[tool.uv.workspace]
-members = ["deployment"]
 
 [dependency-groups]
 dev = [

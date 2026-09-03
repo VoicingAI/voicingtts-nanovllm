@@ -33,7 +33,7 @@ def compute_attention_sizes(
 ) -> dict[str, int]:
     """Derive per-rank attention tensor sizes from model config values.
 
-    This mirrors the attribute math in Cpm4Attention.__init__ so the logic
+    This mirrors the attribute math in BackboneAttention.__init__ so the logic
     can be unit-tested without constructing the full nn.Module.
 
     Args:
@@ -72,7 +72,7 @@ def compute_attention_sizes(
 def parse_qkv_lora_targets(lora_targets: list[str]) -> list[str]:
     """Derive the qkv_proj LoRA sub-target list from raw target_modules_lm.
 
-    Cpm4Attention strips the ``_proj`` suffix and keeps only q/k/v entries.
+    BackboneAttention strips the ``_proj`` suffix and keeps only q/k/v entries.
 
     Args:
         lora_targets: Raw ``target_modules_lm`` list (e.g. ``["q_proj", "o_proj"]``).
@@ -86,7 +86,7 @@ def parse_qkv_lora_targets(lora_targets: list[str]) -> list[str]:
 def parse_gate_up_lora_targets(lora_targets: list[str]) -> list[int]:
     """Derive the gate_up_proj LoRA index list from raw target_modules_lm.
 
-    Cpm4MLP uses index 0 for gate_proj and index 1 for up_proj.
+    BackboneMLP uses index 0 for gate_proj and index 1 for up_proj.
 
     Args:
         lora_targets: Raw ``target_modules_lm`` list.

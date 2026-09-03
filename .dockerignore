@@ -20,7 +20,6 @@ dist
 # Editors / OS
 .DS_Store
 
-/deployment/Dockerfile
 
 /models
 *.wav
