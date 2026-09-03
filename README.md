@@ -17,5 +17,3 @@ server = VoicingTTS.from_pretrained("/models/ttsv2", devices=[0])
 
 `from_pretrained` returns an async pool inside an event loop, otherwise a sync pool,
 and selects the runner from the `architecture` field of the checkpoint's `config.json`.
-
-See `ARCHITECTURE.md` for internals and `CONTRIBUTING.md` to develop.
