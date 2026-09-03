@@ -20,7 +20,7 @@ from voicingtts_nanovllm.layers.embed_head import VocabParallelEmbedding
 from voicingtts_nanovllm.models.voicingtts.config import (
     CfmConfig,
     LoRAConfig,
-    MiniCPM4Config,
+    VoicingLMConfig,
     VoicingTTSConfig,
 )
 from voicingtts_nanovllm.models.voicingtts.model_utils import (
@@ -48,8 +48,8 @@ from voicingtts_nanovllm.utils.context import (
 from voicingtts_nanovllm.utils.distributed import get_tp_world_size
 
 
-class MiniCPMLongRoPE(nn.Module):
-    """MiniCPM LongRoPE implementation equivalent to modeling_minicpm.py"""
+class VoicingLongRoPE(nn.Module):
+    """LongRoPE implementation matching the reference language model."""
 
     def __init__(
         self,
@@ -130,7 +130,7 @@ def get_cpm4_rope(
     rope_scaling: dict | None = None,
 ):
     """Get CPM4 LongRoPE implementation"""
-    rotary_emb = MiniCPMLongRoPE(
+    rotary_emb = VoicingLongRoPE(
         head_size=head_size,
         rotary_dim=rotary_dim,
         max_position_embeddings=max_position,
@@ -364,7 +364,7 @@ class Cpm4MLP(nn.Module):
 class Cpm4DecoderLayer(nn.Module):
     def __init__(
         self,
-        config: MiniCPM4Config,
+        config: VoicingLMConfig,
         is_causal: bool = True,
         lora_config: Optional[LoRAConfig] = None,
         lora_domain: str = LM_LORA_DOMAIN,
@@ -393,7 +393,7 @@ class Cpm4DecoderLayer(nn.Module):
         )
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        # depth scaling like MiniCPM
+        # depth scaling, as the reference language model does
         self.scale_depth = getattr(config, "scale_depth", 1.0)
         self.num_hidden_layers = config.num_hidden_layers
 
@@ -420,7 +420,7 @@ class Cpm4DecoderLayer(nn.Module):
 class Cpm4Model(nn.Module):
     def __init__(
         self,
-        config: MiniCPM4Config,
+        config: VoicingLMConfig,
         is_causal: bool = True,
         lora_config: Optional[LoRAConfig] = None,
         lora_domain: str = LM_LORA_DOMAIN,
@@ -496,7 +496,7 @@ class VoicingTTSLocDiT(nn.Module):
 
     def __init__(
         self,
-        config: MiniCPM4Config,
+        config: VoicingLMConfig,
         in_channels: int = 64,
         lora_config: Optional[LoRAConfig] = None,
     ):
@@ -686,7 +686,7 @@ class UnifiedCFM(torch.nn.Module):
 
 
 class VoicingTTSLocEnc(nn.Module):
-    def __init__(self, config: MiniCPM4Config, input_dim: int = 64):
+    def __init__(self, config: VoicingLMConfig, input_dim: int = 64):
         super().__init__()
         self.config = config
         self.special_token = nn.Parameter(torch.empty(1, 1, 1, config.hidden_size))

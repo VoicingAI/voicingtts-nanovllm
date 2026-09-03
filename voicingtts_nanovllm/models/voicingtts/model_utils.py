@@ -7,9 +7,9 @@ tests without a GPU.
 Extraction map (model.py → model_utils.py):
   rotate_half                 — standalone free function (lines 37-40)
   apply_rotary_pos_emb        — standalone free function (lines 43-55)
-  apply_rotary_emb_tokens     — body of MiniCPMLongRoPE._apply_rotary_emb (lines 135-153)
-  compute_longrope_scaling_factor — math from MiniCPMLongRoPE.__init__ (line 81)
-  compute_longrope_freqs      — body of MiniCPMLongRoPE._set_cos_sin_cache (lines 90-107)
+  apply_rotary_emb_tokens     — body of VoicingLongRoPE._apply_rotary_emb (lines 135-153)
+  compute_longrope_scaling_factor — math from VoicingLongRoPE.__init__ (line 81)
+  compute_longrope_freqs      — body of VoicingLongRoPE._set_cos_sin_cache (lines 90-107)
   optimized_scale             — body of UnifiedCFM.optimized_scale (lines 671-676)
   sway_sampling_schedule      — body of UnifiedCFM.forward t_span logic (lines 665-667)
   sinusoidal_pos_emb          — body of SinusoidalPosEmb.forward (lines 494-503)
@@ -52,7 +52,7 @@ def apply_rotary_pos_emb(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Apply Rotary Position Embedding to query and key tensors.
 
-    Equivalent to the MiniCPM modeling implementation.  Computation is done
+    Equivalent to the reference language-model implementation.  Computation is done
     in float32 and the result is cast back to the original key dtype.
 
     Args:
@@ -82,9 +82,9 @@ def apply_rotary_emb_tokens(
     cos: torch.Tensor,
     sin: torch.Tensor,
 ) -> torch.Tensor:
-    """Apply rotary embedding per token (MiniCPMLongRoPE token-level variant).
+    """Apply rotary embedding per token (VoicingLongRoPE token-level variant).
 
-    Matches the math inside ``MiniCPMLongRoPE._apply_rotary_emb``.
+    Matches the math inside ``VoicingLongRoPE._apply_rotary_emb``.
     Computation is promoted to float32 internally and cast back to the
     original dtype on return.
 
@@ -119,7 +119,7 @@ def compute_longrope_scaling_factor(
 ) -> float:
     """Compute the LongRoPE amplitude scaling factor.
 
-    This reproduces the formula used in ``MiniCPMLongRoPE.__init__``:
+    This reproduces the formula used in ``VoicingLongRoPE.__init__``:
 
     .. code-block:: text
 
@@ -147,7 +147,7 @@ def compute_longrope_freqs(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Pre-compute LongRoPE cosine/sine caches for *seq_len* positions.
 
-    Mirrors the body of ``MiniCPMLongRoPE._set_cos_sin_cache``.
+    Mirrors the body of ``VoicingLongRoPE._set_cos_sin_cache``.
 
     Args:
         seq_len: Number of positions to pre-compute.

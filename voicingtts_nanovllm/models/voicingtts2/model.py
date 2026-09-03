@@ -14,7 +14,7 @@ from voicingtts_nanovllm.layers.lora import (
     LoRAQKVParallelLinear,
     LoRARowParallelLinear,
 )
-from voicingtts_nanovllm.models.voicingtts2.config import CfmConfig, LoRAConfig, MiniCPM4Config, VoicingTTS2Config
+from voicingtts_nanovllm.models.voicingtts2.config import CfmConfig, LoRAConfig, VoicingLMConfig, VoicingTTS2Config
 from voicingtts_nanovllm.models.voicingtts2.model_utils import (
     EulerSolverConfig,
     EulerSolverInputs,
@@ -39,7 +39,7 @@ from voicingtts_nanovllm.utils.context import (
 from voicingtts_nanovllm.utils.distributed import get_tp_world_size
 
 
-class MiniCPMLongRoPE(nn.Module):
+class VoicingLongRoPE(nn.Module):
     def __init__(
         self,
         head_size: int,
@@ -95,7 +95,7 @@ class MiniCPMLongRoPE(nn.Module):
 
 
 def get_cpm4_rope(head_size: int, rotary_dim: int, max_position: int, base: float, rope_scaling=None):
-    return MiniCPMLongRoPE(
+    return VoicingLongRoPE(
         head_size=head_size,
         rotary_dim=rotary_dim,
         max_position_embeddings=max_position,
@@ -262,7 +262,7 @@ class Cpm4MLP(nn.Module):
 class Cpm4DecoderLayer(nn.Module):
     def __init__(
         self,
-        config: MiniCPM4Config,
+        config: VoicingLMConfig,
         is_causal: bool = True,
         lora_config: Optional[LoRAConfig] = None,
         use_rope: bool = True,
@@ -307,7 +307,7 @@ class Cpm4DecoderLayer(nn.Module):
 class Cpm4Model(nn.Module):
     def __init__(
         self,
-        config: MiniCPM4Config,
+        config: VoicingLMConfig,
         is_causal: bool = True,
         lora_config: Optional[LoRAConfig] = None,
         use_rope: bool = True,
@@ -356,7 +356,7 @@ class TimestepEmbedding(nn.Module):
 
 
 class VoicingTTS2LocDiT(nn.Module):
-    def __init__(self, config: MiniCPM4Config, in_channels: int = 64, lora_config: Optional[LoRAConfig] = None):
+    def __init__(self, config: VoicingLMConfig, in_channels: int = 64, lora_config: Optional[LoRAConfig] = None):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = in_channels
@@ -458,7 +458,7 @@ class UnifiedCFM(nn.Module):
 
 
 class VoicingTTS2LocEnc(nn.Module):
-    def __init__(self, config: MiniCPM4Config, input_dim: int = 64):
+    def __init__(self, config: VoicingLMConfig, input_dim: int = 64):
         super().__init__()
         self.special_token = nn.Parameter(torch.empty(1, 1, 1, config.hidden_size))
         self.in_proj = nn.Linear(input_dim, config.hidden_size, bias=True)

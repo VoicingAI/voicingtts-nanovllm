@@ -258,10 +258,10 @@ def test_solve_euler_preserves_input_for_zero_flow_and_zeroes_dt_outside_mean_mo
         torch.testing.assert_close(dt_input, torch.zeros_like(dt_input))
 
 
-def test_minicpm_long_rope_forward_matches_token_helper():
-    from voicingtts_nanovllm.models.voicingtts2.model import MiniCPMLongRoPE
+def test_longrope_forward_matches_token_helper():
+    from voicingtts_nanovllm.models.voicingtts2.model import VoicingLongRoPE
 
-    rope = MiniCPMLongRoPE(8, 8, 16, 10000.0)
+    rope = VoicingLongRoPE(8, 8, 16, 10000.0)
     positions = torch.tensor([1, 3])
     query = torch.randn(2, 16)
     key = torch.randn(2, 8)

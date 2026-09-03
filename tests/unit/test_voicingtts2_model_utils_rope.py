@@ -204,9 +204,9 @@ class TestSinusoidalPosEmb:
 
 class TestHelpersConsistentWithModule:
     def test_scaling_factor_matches_module(self):
-        from voicingtts_nanovllm.models.voicingtts2.model import MiniCPMLongRoPE
+        from voicingtts_nanovllm.models.voicingtts2.model import VoicingLongRoPE
 
-        rope = MiniCPMLongRoPE(
+        rope = VoicingLongRoPE(
             head_size=8,
             rotary_dim=8,
             max_position_embeddings=64,
@@ -218,15 +218,15 @@ class TestHelpersConsistentWithModule:
         assert rope.scaling_factor == pytest.approx(compute_rope_scaling_factor(64, 32))
 
     def test_inv_freq_matches_module(self):
-        from voicingtts_nanovllm.models.voicingtts2.model import MiniCPMLongRoPE
+        from voicingtts_nanovllm.models.voicingtts2.model import VoicingLongRoPE
 
-        rope = MiniCPMLongRoPE(8, 8, 32, 10000.0, original_max_position_embeddings=32)
+        rope = VoicingLongRoPE(8, 8, 32, 10000.0, original_max_position_embeddings=32)
         torch.testing.assert_close(rope.inv_freq, build_rope_inv_freq(8, 10000.0))
 
     def test_apply_rotary_emb_matches_module_method(self):
-        from voicingtts_nanovllm.models.voicingtts2.model import MiniCPMLongRoPE
+        from voicingtts_nanovllm.models.voicingtts2.model import VoicingLongRoPE
 
-        rope = MiniCPMLongRoPE(8, 8, 32, 10000.0, original_max_position_embeddings=32)
+        rope = VoicingLongRoPE(8, 8, 32, 10000.0, original_max_position_embeddings=32)
         x = torch.randn(4, 2, 8)
         cos = torch.randn(4, 8)
         sin = torch.randn(4, 8)

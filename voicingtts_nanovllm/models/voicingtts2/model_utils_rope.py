@@ -33,7 +33,7 @@ def build_rope_cos_sin_cache(
     original_max_position_embeddings: int,
     dtype: torch.dtype = torch.float32,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Build the cos/sin embedding caches used by MiniCPMLongRoPE."""
+    """Build the cos/sin embedding caches used by VoicingLongRoPE."""
     t = torch.arange(seq_len, dtype=inv_freq.dtype)
     ext_factors = (
         torch.tensor(long_factor, dtype=torch.float32)

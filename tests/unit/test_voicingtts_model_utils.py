@@ -130,7 +130,7 @@ def test_apply_rotary_pos_emb_numerical_sanity():
 
 
 # ---------------------------------------------------------------------------
-# MiniCPMLongRoPE._apply_rotary_emb (extracted as apply_rotary_emb_tokens)
+# VoicingLongRoPE._apply_rotary_emb (extracted as apply_rotary_emb_tokens)
 # ---------------------------------------------------------------------------
 
 
@@ -449,10 +449,10 @@ def test_apply_classifier_free_guidance_uses_optimal_negative_scale():
     assert torch.allclose(result, torch.tensor([[[[2.0, 0.0]]]]), atol=1e-6)
 
 
-def test_minicpm_longrope_rotates_cpu_queries_and_keys():
-    from voicingtts_nanovllm.models.voicingtts.model import MiniCPMLongRoPE
+def test_longrope_rotates_cpu_queries_and_keys():
+    from voicingtts_nanovllm.models.voicingtts.model import VoicingLongRoPE
 
-    rope = MiniCPMLongRoPE(
+    rope = VoicingLongRoPE(
         head_size=4,
         rotary_dim=4,
         max_position_embeddings=8,
@@ -609,9 +609,9 @@ def test_voicingtts_model_forward_uses_cpu_bookkeeping_with_stubbed_submodules(m
 
 
 def _mini_cpm_config(num_hidden_layers=1):
-    from voicingtts_nanovllm.models.voicingtts.config import MiniCPM4Config
+    from voicingtts_nanovllm.models.voicingtts.config import VoicingLMConfig
 
-    return MiniCPM4Config(
+    return VoicingLMConfig(
         bos_token_id=0,
         eos_token_id=1,
         hidden_size=8,
