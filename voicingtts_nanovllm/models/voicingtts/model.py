@@ -121,7 +121,7 @@ class BackboneLongRoPE(nn.Module):
         cos = self.cos_cached[positions]  # [num_tokens, head_dim]
         sin = self.sin_cached[positions]  # [num_tokens, head_dim]
 
-        # Apply rotary embedding using the original nano-vllm method but with corrected math
+        # Apply rotary embedding with the corrected math
         query_shape = query.shape
         query = query.reshape(num_tokens, -1, self.dim)
         query = self._apply_rotary_emb(query, cos, sin).view(query_shape)
@@ -292,7 +292,7 @@ class BackboneAttention(nn.Module):
                 k_by_head = self.k_norm(k_by_head)
                 k = k_by_head.view(k.shape)
 
-            # Apply rotary embedding using nano-vllm interface
+            # Apply rotary embedding
             q, k = self.rotary_emb(positions, q, k)
 
             q = q.view(-1, self.num_heads, self.head_dim)
@@ -311,7 +311,7 @@ class BackboneAttention(nn.Module):
                 k_by_head = self.k_norm(k_by_head)
                 k = k_by_head.view(k.shape)
 
-            # Apply rotary embedding using nano-vllm interface
+            # Apply rotary embedding
             q, k = self.rotary_emb(positions.repeat(B), q, k)
             q = q.view(B, -1, self.num_heads, self.head_dim)
             k = k.view(B, -1, self.num_kv_heads, self.head_dim)
