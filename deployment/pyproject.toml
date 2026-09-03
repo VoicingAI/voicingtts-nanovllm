@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voicingtts-nanovllm-deployment"
+version = "0.0.0"
+description = "FastAPI service wrapper for voicingtts-nanovllm"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "voicingtts-nanovllm",
+    "fastapi[standard]",
+    "aiohttp",
+    "prometheus_client",
+    "lameenc",
+    "boto3",
+    "huggingface_hub",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.uv.sources]
+voicingtts-nanovllm = { workspace = true }
